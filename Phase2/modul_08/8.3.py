@@ -13,15 +13,14 @@ def pairwise_similarity(matrix: np.ndarray) -> np.ndarray:
     Compute pairwise cosine similarity for all rows in a matrix.
     Returns an (n, n) matrix. All rows must be non-zero.
     """
-    # Normaliser d'abord toutes les lignes à une longueur unitaire (norme L2 = 1)
+    # Normalise all rows to unit length first
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     norms = np.where(norms == 0, 1, norms)
     normed = matrix / norms
-    
-    # Le produit scalaire des vecteurs normalisés donne la matrice de similarité cosinus
+    # Dot product of normalised vectors = cosine similarity
     return (normed @ normed.T).astype(np.float32)
 
-# Exemple d'utilisation avec des vecteurs aléatoires
+# Example
 rng = np.random.default_rng(42)
 vecs = rng.standard_normal((4, 8)).astype(np.float32)
 sim_matrix = pairwise_similarity(vecs)
@@ -29,7 +28,7 @@ sim_matrix = pairwise_similarity(vecs)
 print("Pairwise similarities:")
 for i in range(4):
     for j in range(i + 1, 4):
-        print(f" vec[{i}] vs vec[{j}]: {sim_matrix[i, j]:.4f}")
+        print(f"  vec[{i}] vs vec[{j}]: {sim_matrix[i, j]:.4f}")
 
-# La diagonale est toujours de 1.0 car un vecteur est identique à lui-même
-print(f"\nDiagonal: {np.diag(sim_matrix)}")
+# Diagonal is always 1.0 (a vector is identical to itself)
+print(f"Diagonal: {np.diag(sim_matrix)}")

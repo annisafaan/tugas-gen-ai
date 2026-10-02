@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 import re
 
-# 1. Struktur Data untuk Chunk
 @dataclass
 class Chunk:
     doc_id: str
@@ -10,7 +9,6 @@ class Chunk:
     char_start: int
     char_end: int
 
-# 2. Fungsi untuk memecah teks berdasarkan kalimat dan ukuran maksimal
 def chunk_by_sentences(
     text: str,
     doc_id: str,
@@ -21,10 +19,11 @@ def chunk_by_sentences(
     Split text into chunks that respect sentence boundaries.
     Adds overlap so context is not lost at chunk edges.
     """
-    # Memisahkan teks berdasarkan akhir kalimat (. ! ?)
+    # Split on sentence endings
     sentences = re.split(r'(?<=[.!?])\s+', text.strip())
     chunks: list[Chunk] = []
     current = ""
+    current_start = 0
     char_offset = 0
     chunk_idx = 0
 
@@ -32,12 +31,12 @@ def chunk_by_sentences(
         candidate = (current + " " + sentence).strip() if current else sentence
 
         if len(candidate) > max_chars and current:
-            # Simpan chunk saat ini
+            # Save current chunk
             end = char_offset + len(current)
             chunks.append(Chunk(doc_id, chunk_idx, current.strip(), char_offset, end))
             chunk_idx += 1
 
-            # Mulai chunk baru dengan menyertakan overlap dari akhir chunk sebelumnya
+            # Start new chunk with overlap from end of previous
             overlap_start = max(0, len(current) - overlap_chars)
             overlap_text = current[overlap_start:]
             current = (overlap_text + " " + sentence).strip()
@@ -45,17 +44,18 @@ def chunk_by_sentences(
         else:
             current = candidate
 
-    # Simpan chunk terakhir
+    # Save final chunk
     if current.strip():
         end = char_offset + len(current)
         chunks.append(Chunk(doc_id, chunk_idx, current.strip(), char_offset, end))
 
     return chunks
 
-# 3. Uji coba dengan dokumen sampel
+# Test with a sample document
 document = """
 Large language models (LLMs) are neural networks trained on vast amounts of text data.
 They learn to predict the next token in a sequence, which gives them broad language understanding.
+
 Models like GPT-4 and Claude are examples of LLMs used in production today.
 
 Retrieval-Augmented Generation, or RAG, extends LLMs by connecting them to external knowledge bases.
@@ -64,13 +64,10 @@ This allows the model to answer questions about recent events or private data it
 
 The retrieval step in RAG typically uses embedding-based semantic search.
 A query is embedded into a vector, and the nearest document vectors are retrieved from a database.
-These documents are then injected into the context window alongside the query.
+These documents are then injected into the LLM's context window alongside the query.
 """
 
-print("--- MENJALANKAN TEXT CHUNKING ---")
-# Memecah dokumen dengan batas maksimal 300 karakter dan overlap 50 karakter
 chunks = chunk_by_sentences(document.strip(), doc_id="intro_to_llms", max_chars=300, overlap_chars=50)
-
-print(f"Total chunk yang dihasilkan: {len(chunks)}\n")
 for c in chunks:
-    print(f"Chunk {c.chunk_index} (Karakter {c.char_start}-{c.char_end}):\n{c.text}\n{'-'*40}")
+    print(f"Chunk{c.chunk_index} ({c.char_start}-{c.char_end}): {c.text[:80]}...")
+    print()

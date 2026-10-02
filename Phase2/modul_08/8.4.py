@@ -1,16 +1,20 @@
+from openai import OpenAI
 import os
-import time
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
-import voyageai
 
-# 1. Muat environment variables dan inisialisasi Voyage AI
 load_dotenv()
-vo = voyageai.Client(api_key=os.environ["VOYAGE_API_KEY"])
 
-# 2. Struktur Data untuk Dokumen dan Hasil Pencarian[cite: 13]
+# Mengarahkan client ke Ollama lokal (bebas rate limit & gratis)
+openai_client = OpenAI(
+    base_url="http://localhost:11434/v1",
+    api_key="ollama"
+)
+
+# — Data structures ——————————————————————————————
+
 @dataclass
 class Document:
     id: str
@@ -24,29 +28,32 @@ class SearchResult:
     score: float
     rank: int
 
-# 3. Helper untuk membuat batch embeddings menggunakan Voyage AI
-def embed_batch(texts: list[str], model: str = "voyage-3", input_type: str = "document") -> np.ndarray:
-    """Embed texts in a single API call. Returns (n, dim) float32 array."""
-    result = vo.embed(texts, model=model, input_type=input_type)
-    return np.array(result.embeddings, dtype=np.float32)
+# — Embedding helper (Menggunakan Ollama lokal) ——————————————
 
-# 4. Implementasi In-Memory Vector Store[cite: 14, 15, 16]
+def embed_batch(texts: list[str], model: str = "nomic-embed-text") -> np.ndarray:
+    """Embed texts in a single local API call. Returns (n, dim) float32 array."""
+    response = openai_client.embeddings.create(input=texts, model=model)
+    vectors = sorted(response.data, key=lambda e: e.index)
+    return np.array([v.embedding for v in vectors], dtype=np.float32)
+
+# — Simple in-memory vector store ———————————————————————————
+
 class VectorStore:
     """
     In-memory vector store for semantic search.
     Suitable for corpora up to ~100k documents.
     """
-    def __init__(self, embed_model: str = "voyage-3"):
+    def __init__(self, embed_model: str = "nomic-embed-text"):
         self.embed_model = embed_model
         self._documents: list[Document] = []
-        self._matrix: Optional[np.ndarray] = None  # (n, dim) normalised matrix
+        self._matrix: Optional[np.ndarray] = None  # (n, dim) normalised
 
     def add_documents(self, documents: list[Document]) -> None:
         """Embed and index a list of documents."""
         texts = [d.text for d in documents]
-        vectors = embed_batch(texts, model=self.embed_model, input_type="document")
+        vectors = embed_batch(texts, model=self.embed_model)
 
-        # Normalisasi vektor untuk mempercepat perhitungan cosine similarity via dot product[cite: 15]
+        # Normalise for fast cosine similarity via dot product
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms = np.where(norms == 0, 1, norms)
         normed = (vectors / norms).astype(np.float32)
@@ -55,29 +62,29 @@ class VectorStore:
             doc.embedding = vec
             self._documents.append(doc)
 
-        # Gabungkan ke dalam satu matriks numpy[cite: 15]
+        # Rebuild the full matrix
         self._matrix = np.array(
             [d.embedding for d in self._documents], dtype=np.float32
         )
-        print(f"Index successfully contains {len(self._documents)} documents.")
+        print(f"Index now contains {len(self._documents)} documents.")
 
-    def search(self, query: str, k: int = 3) -> list[SearchResult]:
+    def search(self, query: str, k: int = 5) -> list[SearchResult]:
         """Return the k most similar documents for a query string."""
         if self._matrix is None or len(self._documents) == 0:
             raise RuntimeError("No documents indexed yet.")
 
-        # Embed dan normalisasi query[cite: 15, 16]
-        q_vec = embed_batch([query], model=self.embed_model, input_type="query")[0]
-        
+        # Embed and normalise query
+        q_vec = embed_batch([query], model=self.embed_model)[0]
+
         q_norm = np.linalg.norm(q_vec)
         if q_norm == 0:
             return []
         q_vec = (q_vec / q_norm).astype(np.float32)
 
-        # Hitung kemiripan pakai Dot Product (matriks @ vektor query)[cite: 16]
+        # Cosine similarities: matrix @ vector -> shape (n,)
         scores = self._matrix @ q_vec
 
-        # Ambil top-k indeks tertinggi secara descending[cite: 16]
+        # Top-k indices (descending)
         k = min(k, len(self._documents))
         top_idx = np.argsort(scores)[::-1][:k]
 
@@ -94,8 +101,8 @@ class VectorStore:
     def size(self) -> int:
         return len(self._documents)
 
+# — Demo ————————————————————————————————————————————
 
-# 5. Korpus Dokumen Contoh (Dataset Dummy)[cite: 17]
 CORPUS = [
     Document("d01", "Retrieval-Augmented Generation (RAG) combines information retrieval with language model generation to answer questions using external knowledge."),
     Document("d02", "Vector databases store high-dimensional embeddings and enable fast approximate nearest-neighbour search using algorithms like HNSW and IVF."),
@@ -109,28 +116,17 @@ CORPUS = [
     Document("d10", "Agents use language models as a reasoning engine, enabling them to plan multi-step tasks, call tools, and take actions based on observations."),
 ]
 
-print("--- INITIALIZING VECTOR STORE & INDEXING CORPUS ---")
 store = VectorStore()
 store.add_documents(CORPUS)
 
-# Jeda setelah indexing untuk mencegah bentrok rate limit
-print("Menunggu sebentar setelah indexing...")
-time.sleep(25)
-
-# 6. Skenario Uji Pertanyaan (Queries)
 QUERIES = [
     "How does RAG work?",
     "What algorithms do vector databases use?",
     "How do I split documents for embedding?",
 ]
 
-print("\n--- RUNNING SEMANTIC SEARCH QUERIES ---")
 for query in QUERIES:
     print(f"\nQuery: {query!r}")
     results = store.search(query, k=3)
     for r in results:
         print(f"  [{r.rank}] score={r.score:.4f} | {r.document.text[:80]}...")
-    
-    # Berikan jeda 25 detik antar kueri agar aman dari batas 3 RPM
-    print("Menunggu sebentar untuk menghindari rate limit...")
-    time.sleep(25)

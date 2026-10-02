@@ -1,14 +1,19 @@
+from openai import OpenAI
 import os
-import time
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
 from dotenv import load_dotenv
-import voyageai
 
-# 1. Muat environment variables dan inisialisasi Voyage AI
 load_dotenv()
-vo = voyageai.Client(api_key=os.environ["VOYAGE_API_KEY"])
+
+# Mengarahkan client ke Ollama lokal
+openai_client = OpenAI(
+    base_url="http://localhost:11434/v1",
+    api_key="ollama"
+)
+
+# — Data structures dari Modul 8.4 ———————————————————
 
 @dataclass
 class Document:
@@ -23,19 +28,22 @@ class SearchResult:
     score: float
     rank: int
 
-def embed_batch(texts: list[str], model: str = "voyage-3", input_type: str = "document") -> np.ndarray:
-    result = vo.embed(texts, model=model, input_type=input_type)
-    return np.array(result.embeddings, dtype=np.float32)
+def embed_batch(texts: list[str], model: str = "nomic-embed-text") -> np.ndarray:
+    """Embed texts in a single local API call. Returns (n, dim) float32 array."""
+    response = openai_client.embeddings.create(input=texts, model=model)
+    vectors = sorted(response.data, key=lambda e: e.index)
+    return np.array([v.embedding for v in vectors], dtype=np.float32)
 
 class VectorStore:
-    def __init__(self, embed_model: str = "voyage-3"):
+    def __init__(self, embed_model: str = "nomic-embed-text"):
         self.embed_model = embed_model
         self._documents: list[Document] = []
         self._matrix: Optional[np.ndarray] = None
 
     def add_documents(self, documents: list[Document]) -> None:
         texts = [d.text for d in documents]
-        vectors = embed_batch(texts, model=self.embed_model, input_type="document")
+        vectors = embed_batch(texts, model=self.embed_model)
+
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms = np.where(norms == 0, 1, norms)
         normed = (vectors / norms).astype(np.float32)
@@ -44,13 +52,16 @@ class VectorStore:
             doc.embedding = vec
             self._documents.append(doc)
 
-        self._matrix = np.array([d.embedding for d in self._documents], dtype=np.float32)
+        self._matrix = np.array(
+            [d.embedding for d in self._documents], dtype=np.float32
+        )
+        print(f"Index now contains {len(self._documents)} documents.")
 
     def search(self, query: str, k: int = 5) -> list[SearchResult]:
         if self._matrix is None or len(self._documents) == 0:
             raise RuntimeError("No documents indexed yet.")
-        
-        q_vec = embed_batch([query], model=self.embed_model, input_type="query")[0]
+
+        q_vec = embed_batch([query], model=self.embed_model)[0]
         q_norm = np.linalg.norm(q_vec)
         if q_norm == 0:
             return []
@@ -69,7 +80,8 @@ class VectorStore:
             for rank, i in enumerate(top_idx)
         ]
 
-# 2. Struktur Data dan Fungsi Evaluasi Retrieval
+# — Evaluasi Retrieval (Modul 8.6) ————————————————————
+
 @dataclass
 class RetrievalEvalCase:
     query: str
@@ -96,7 +108,7 @@ def mean_reciprocal_rank(retrieved_ids: list[str], relevant_ids: list[str]) -> f
             return 1.0 / rank
     return 0.0
 
-def evaluate_retrieval(store: VectorStore, eval_cases: list[RetrievalEvalCase], k: int = 3) -> dict:
+def evaluate_retrieval(store, eval_cases: list[RetrievalEvalCase], k: int = 5) -> dict:
     """Run all eval cases and return aggregate metrics."""
     p_scores, r_scores, mrr_scores = [], [], []
 
@@ -107,9 +119,6 @@ def evaluate_retrieval(store: VectorStore, eval_cases: list[RetrievalEvalCase], 
         p_scores.append(precision_at_k(retrieved_ids, case.relevant_doc_ids, k))
         r_scores.append(recall_at_k(retrieved_ids, case.relevant_doc_ids, k))
         mrr_scores.append(mean_reciprocal_rank(retrieved_ids, case.relevant_doc_ids))
-        
-        # Berikan jeda antar kueri evaluasi agar aman dari rate limit
-        time.sleep(22)
 
     return {
         f"precision@{k}": round(float(np.mean(p_scores)), 4),
@@ -117,7 +126,8 @@ def evaluate_retrieval(store: VectorStore, eval_cases: list[RetrievalEvalCase], 
         "MRR": round(float(np.mean(mrr_scores)), 4),
     }
 
-# 3. Korpus Dokumen dan Kasus Uji Evaluasi
+# — Inisialisasi Corpus dan Kasus Uji ————————————————
+
 CORPUS = [
     Document("d01", "Retrieval-Augmented Generation (RAG) combines information retrieval with language model generation to answer questions using external knowledge."),
     Document("d02", "Vector databases store high-dimensional embeddings and enable fast approximate nearest-neighbour search using algorithms like HNSW and IVF."),
@@ -131,6 +141,9 @@ CORPUS = [
     Document("d10", "Agents use language models as a reasoning engine, enabling them to plan multi-step tasks, call tools, and take actions based on observations."),
 ]
 
+store = VectorStore()
+store.add_documents(CORPUS)
+
 eval_cases = [
     RetrievalEvalCase("How does RAG work?", ["d01", "d08"]),
     RetrievalEvalCase("What are vector databases?", ["d02", "d06"]),
@@ -139,14 +152,6 @@ eval_cases = [
     RetrievalEvalCase("How do transformers model token relationships?", ["d09"]),
 ]
 
-print("--- INITIALIZING VECTOR STORE & INDEXING CORPUS ---")
-store = VectorStore()
-store.add_documents(CORPUS)
-print("Indeks dokumen selesai. Menunggu sebentar sebelum evaluasi...")
-time.sleep(25)
-
-print("\n--- MENJALANKAN RETRIEVAL EVALUATION ---")
 metrics = evaluate_retrieval(store, eval_cases, k=3)
-
-print("\nHasil Evaluasi Retrieval:")
+print("\nEvaluation Metrics:")
 print(metrics)
