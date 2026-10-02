@@ -6,11 +6,11 @@ load_dotenv()
 
 client = OpenAI(
     base_url="http://localhost:11434/v1",
-    api_key=os.environ["OPENAI_API_KEY"]
+    api_key="ollama"
 )
 
 stream = client.chat.completions.create(
-    model="qwen2.5vl:3b",
+    model="qwen2.5:3b",
     max_tokens=512,
     stream=True,
     messages=[{"role": "user", "content": "Explain embeddings in 3 bullet points."}]
