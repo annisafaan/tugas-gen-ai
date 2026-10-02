@@ -1,16 +1,17 @@
-import os
 from openai import OpenAI
+import os
+from dotenv import load_dotenv
 
-# 1. Hubungkan OpenAI SDK ke server lokal Ollama
+# Memuat file .env
+load_dotenv()
+
+# Mengarahkan client ke Ollama lokal
 client = OpenAI(
     base_url="http://localhost:11434/v1",
-    api_key="ollama",
+    api_key="ollama"
 )
 
-# 2. Contoh System Prompt Lemah (Vague, tanpa batasan jelas)[cite: 20]
-WEAK_SYSTEM = "You are an AI assistant."
-
-# 3. Contoh System Prompt Kuat (Peran, tugas, aturan, dan format spesifik)[cite: 20, 21]
+# Strong system prompt - explicit role, rules, format
 STRONG_SYSTEM = """You are a senior Python engineer reviewing code for a production AI pipeline.
 
 Your job:
@@ -26,22 +27,23 @@ Rules:
 Format:
 Return your review as a numbered list. Each item: Issue -> Impact -> Fix."""
 
-# 4. Target kode Python yang akan di-review (mengandung celah keamanan)[cite: 21]
-target_code = """Review this function:
+messages = [
+    {
+        "role": "user", 
+        "content": """Review this function:
 
 def get_user(user_id):
     key = os.getenv('DB_KEY')
     result = requests.get(f'http://db/{user_id}?key={key}')
     return result.json()"""
+    }
+]
 
-messages = [{"role": "user", "content": target_code}]
-
-print("--- MENJALANKAN DENGAN STRONG SYSTEM PROMPT ---")
-
-# 5. Kirim permintaan ke model lokal qwen2.5:3b menggunakan Strong System Prompt
+# Mengirim system prompt dan pesan user ke model lokal
 response = client.chat.completions.create(
     model="qwen2.5:3b",
-    messages=[{"role": "system", "content": STRONG_SYSTEM}] + messages,
+    max_tokens=1024,
+    messages=[{"role": "system", "content": STRONG_SYSTEM}] + messages
 )
 
 print(response.choices[0].message.content)
