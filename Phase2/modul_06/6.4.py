@@ -29,12 +29,12 @@ tools = [
 
 def get_model_info(model_name: str) -> dict:
     db = {
-        "gpt-4o": {"context_k": 128, "cost_input": 2.50},
+        "qwen2.5:3b": {"context_k": 128, "cost_input": 2.50},
         "claude-sonnet-4-5": {"context_k": 200, "cost_input": 3.00},
     }
     return db.get(model_name, {"error": "unknown model"})
 
-messages = [{"role": "user", "content": "What is gpt-4o's context window?"}]
+messages = [{"role": "user", "content": "What is qwen2.5:3b's context window?"}]
 
 response = client.chat.completions.create(
     model="qwen2.5:3b",  

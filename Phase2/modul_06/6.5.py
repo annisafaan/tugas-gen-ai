@@ -60,7 +60,7 @@ def describe_image_file(path: str) -> str:
 
 print("--- Deskripsi dari URL ---")
 try:
-    url_result = describe_image_url("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Sunrise_over_the_sea.jpg/1280px-Sunrise_over_the_sea.jpg")
+    url_result = describe_image_url("https://thumb.wikimedia.org/wikipedia/commons/thumb/5/55/Prabowo_Subianto_2024_official_portrait.jpg/250px-Prabowo_Subianto_2024_official_portrait.jpg?utm_source=en.wikipedia.org&utm_campaign=parser&utm_content=thumbnail")
     print(url_result)
 except Exception as e:
     print(f"Error URL: {e}")
@@ -68,8 +68,7 @@ except Exception as e:
 # Eksekusi File Lokal
 print("\n--- Deskripsi dari File Lokal ---")
 try:
-    
-    file_result = describe_image_file("contoh_gambar.jpg")
+    file_result = describe_image_file("modul_06\prbw.jpeg")
     print(file_result)
 except Exception as e:
     print(f"Error membaca file lokal: {e}")

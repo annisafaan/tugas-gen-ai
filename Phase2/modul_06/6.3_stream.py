@@ -10,7 +10,7 @@ client = OpenAI(
 )
 
 stream = client.chat.completions.create(
-    model="qwen2.5:3b",
+    model="llama3.2:3b",
     max_tokens=512,
     stream=True,
     messages=[{"role": "user", "content": "Explain embeddings in 3 bullet points."}]
