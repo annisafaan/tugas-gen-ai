@@ -13,8 +13,6 @@ openai_client = OpenAI(
     api_key="ollama"
 )
 
-# — Data structures dari Modul 8.4 ———————————————————
-
 @dataclass
 class Document:
     id: str
